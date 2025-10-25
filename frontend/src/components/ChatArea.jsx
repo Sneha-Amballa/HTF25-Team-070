@@ -1,11 +1,21 @@
 import { useEffect, useState, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Dropdown } from "react-bootstrap";
-import { toast } from "sonner";
 
 const COMMON_EMOJIS = ["👍", "❤️", "😊", "🎉", "🔥", "👏", "✅"];
 
-const ChatArea = ({ roomId, userId, userRole, roomName, messages, onSendMessage, onReaction, onPinMessage, onDeleteMessage }) => {
+const ChatArea = ({
+  roomId,
+  isMember,
+  userId,
+  userRole,
+  roomName,
+  messages,
+  onSendMessage,
+  onReaction,
+  onPinMessage,
+  onDeleteMessage,
+}) => {
   const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef(null);
 
@@ -15,7 +25,6 @@ const ChatArea = ({ roomId, userId, userRole, roomName, messages, onSendMessage,
 
   const handleSendMessage = () => {
     if (!newMessage.trim() || !roomId) return;
-    
     onSendMessage(newMessage.trim());
     setNewMessage("");
   };
@@ -26,6 +35,18 @@ const ChatArea = ({ roomId, userId, userRole, roomName, messages, onSendMessage,
         <div className="text-center text-muted">
           <div style={{ fontSize: "4rem", opacity: 0.5 }}>#</div>
           <p className="fs-5">Select a room to start chatting</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isMember) {
+    return (
+      <div className="flex-grow-1 d-flex align-items-center justify-content-center bg-light">
+        <div className="text-center text-muted">
+          <div style={{ fontSize: "4rem", opacity: 0.5 }}>🔒</div>
+          <p className="fs-5">You are not a member of this room</p>
+          <p className="small">Request to join from the sidebar</p>
         </div>
       </div>
     );
@@ -59,7 +80,10 @@ const ChatArea = ({ roomId, userId, userRole, roomName, messages, onSendMessage,
                 <div key={message.id} className="mb-3 message-group">
                   <div className="d-flex align-items-start gap-2">
                     {/* Avatar */}
-                    <div className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: "40px", height: "40px", fontSize: "0.9rem" }}>
+                    <div
+                      className="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                      style={{ width: "40px", height: "40px", fontSize: "0.9rem" }}
+                    >
                       {message.display_name[0].toUpperCase()}
                     </div>
 
@@ -75,7 +99,7 @@ const ChatArea = ({ roomId, userId, userRole, roomName, messages, onSendMessage,
                         )}
                       </div>
                       <p className="mb-2 small">{message.content}</p>
-                      
+
                       {/* Reactions */}
                       {Object.keys(reactions).length > 0 && (
                         <div className="d-flex flex-wrap gap-1">
@@ -99,8 +123,8 @@ const ChatArea = ({ roomId, userId, userRole, roomName, messages, onSendMessage,
                         </div>
                       )}
                     </div>
-                    
-                    {/* Action Buttons (visible on hover) */}
+
+                    {/* Action Buttons */}
                     <div className="message-actions d-flex gap-1">
                       <Dropdown>
                         <Dropdown.Toggle variant="light" size="sm" className="py-0 px-2">
@@ -117,25 +141,26 @@ const ChatArea = ({ roomId, userId, userRole, roomName, messages, onSendMessage,
                           ))}
                         </Dropdown.Menu>
                       </Dropdown>
-                      
-                      {(userRole === "owner" || userRole === "moderator") && (
-                        <>
-                          <button
-                            className="btn btn-light btn-sm py-0 px-2"
-                            onClick={() => onPinMessage(message.id)}
-                            title="Pin message"
-                          >
-                            📌
-                          </button>
-                          <button
-                            className="btn btn-light btn-sm py-0 px-2"
-                            onClick={() => onDeleteMessage(message.id)}
-                            title="Delete message"
-                          >
-                            🗑️
-                          </button>
-                        </>
+
+                      {/* Pin only for owner/moderator */}
+                      {(userRole === "owner" || userRole === "admin") && (
+                        <button
+                          className="btn btn-light btn-sm py-0 px-2"
+                          onClick={() => onPinMessage(message.id)}
+                          title="Pin message"
+                        >
+                          📌
+                        </button>
                       )}
+
+                      {/* Delete available for all */}
+                      <button
+                        className="btn btn-light btn-sm py-0 px-2"
+                        onClick={() => onDeleteMessage(message.id)}
+                        title="Delete message"
+                      >
+                        🗑️
+                      </button>
                     </div>
                   </div>
                 </div>
