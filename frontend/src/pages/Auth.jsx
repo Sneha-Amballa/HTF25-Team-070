@@ -1,7 +1,6 @@
-// src/pages/Auth.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast, Toaster } from "sonner";
 import { Spinner } from "react-bootstrap";
 
 const Auth = () => {
@@ -12,35 +11,74 @@ const Auth = () => {
   const [displayName, setDisplayName] = useState("");
   const [activeTab, setActiveTab] = useState("signin");
 
-  const handleSignUp = (e) => {
+  const API_URL = "http://localhost:5000/api/auth";
+
+  const handleSignUp = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      toast.success("Account created! You can now sign in.");
-      setEmail("");
-      setPassword("");
-      setDisplayName("");
-      setLoading(false);
-      setActiveTab("signin");
-    }, 1000);
+    try {
+      const res = await fetch(`${API_URL}/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName, email, password }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Account created! You can now sign in.");
+        setActiveTab("signin");
+        setEmail("");
+        setPassword("");
+        setDisplayName("");
+      } else {
+        toast.error(data.message || "Signup failed");
+      }
+    } catch (err) {
+      toast.error(err.message || "Server error");
+    }
+    setLoading(false);
   };
 
-  const handleSignIn = (e) => {
+  const handleSignIn = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      toast.success("Welcome back!");
-      setLoading(false);
-      navigate("/dashboard");
-    }, 1000);
+    try {
+      const res = await fetch(`${API_URL}/signin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Server returned non-JSON response");
+      }
+
+      if (res.ok) {
+        toast.success(`Welcome back, ${data.user.displayName}!`);
+        localStorage.setItem("token", data.token);
+        navigate("/dashboard");
+      } else {
+        toast.error(data.message || "Invalid credentials");
+      }
+    } catch (err) {
+      toast.error(err.message || "Server error");
+    }
+    setLoading(false);
   };
 
   return (
     <div className="d-flex justify-content-center align-items-center vh-100 bg-light">
+      <Toaster richColors />
       <div className="card shadow-lg p-4" style={{ maxWidth: "400px", width: "100%" }}>
         {/* Header */}
         <div className="text-center mb-4">
-          <div className="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" style={{ width: "50px", height: "50px" }}>
+          <div
+            className="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2"
+            style={{ width: "50px", height: "50px" }}
+          >
             🎓
           </div>
           <h3>Study Room</h3>
@@ -50,51 +88,23 @@ const Auth = () => {
         {/* Tabs */}
         <ul className="nav nav-tabs mb-4">
           <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === "signin" ? "active" : ""}`}
-              onClick={() => setActiveTab("signin")}
-            >
-              Sign In
-            </button>
+            <button className={`nav-link ${activeTab === "signin" ? "active" : ""}`} onClick={() => setActiveTab("signin")}>Sign In</button>
           </li>
           <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === "signup" ? "active" : ""}`}
-              onClick={() => setActiveTab("signup")}
-            >
-              Sign Up
-            </button>
+            <button className={`nav-link ${activeTab === "signup" ? "active" : ""}`} onClick={() => setActiveTab("signup")}>Sign Up</button>
           </li>
         </ul>
 
-        {/* Sign In Form */}
+        {/* Sign In */}
         {activeTab === "signin" && (
           <form onSubmit={handleSignIn}>
             <div className="mb-3">
-              <label htmlFor="signin-email" className="form-label">Email</label>
-              <input
-                type="email"
-                id="signin-email"
-                className="form-control"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                required
-              />
+              <label>Email</label>
+              <input type="email" className="form-control" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} required />
             </div>
             <div className="mb-3">
-              <label htmlFor="signin-password" className="form-label">Password</label>
-              <input
-                type="password"
-                id="signin-password"
-                className="form-control"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-                required
-              />
+              <label>Password</label>
+              <input type="password" className="form-control" value={password} onChange={e => setPassword(e.target.value)} disabled={loading} required />
             </div>
             <button className="btn btn-primary w-100" type="submit" disabled={loading}>
               {loading && <Spinner animation="border" size="sm" className="me-2" />}
@@ -103,48 +113,20 @@ const Auth = () => {
           </form>
         )}
 
-        {/* Sign Up Form */}
+        {/* Sign Up */}
         {activeTab === "signup" && (
           <form onSubmit={handleSignUp}>
             <div className="mb-3">
-              <label htmlFor="signup-name" className="form-label">Display Name</label>
-              <input
-                type="text"
-                id="signup-name"
-                className="form-control"
-                placeholder="Your name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                disabled={loading}
-                required
-              />
+              <label>Display Name</label>
+              <input type="text" className="form-control" value={displayName} onChange={e => setDisplayName(e.target.value)} disabled={loading} required />
             </div>
             <div className="mb-3">
-              <label htmlFor="signup-email" className="form-label">Email</label>
-              <input
-                type="email"
-                id="signup-email"
-                className="form-control"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                required
-              />
+              <label>Email</label>
+              <input type="email" className="form-control" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} required />
             </div>
             <div className="mb-3">
-              <label htmlFor="signup-password" className="form-label">Password</label>
-              <input
-                type="password"
-                id="signup-password"
-                className="form-control"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-                minLength={6}
-                required
-              />
+              <label>Password</label>
+              <input type="password" className="form-control" value={password} onChange={e => setPassword(e.target.value)} disabled={loading} minLength={6} required />
             </div>
             <button className="btn btn-primary w-100" type="submit" disabled={loading}>
               {loading && <Spinner animation="border" size="sm" className="me-2" />}
