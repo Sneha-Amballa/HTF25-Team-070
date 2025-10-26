@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import axios from "axios";
 import Sidebar from "../components/Sidebar";
 import ChatArea from "../components/ChatArea";
 import MembersList from "../components/MembersList";
@@ -10,234 +11,120 @@ import { initSocket, closeSocket } from "../services/socket";
 
 const Dashboard = () => {
   const [selectedRoomId, setSelectedRoomId] = useState(null);
-  const [userId] = useState("user-123"); // Mock current user ID
-  const [currentUserName] = useState("John Doe"); // Mock current user name
-  const [rooms, setRooms] = useState([
-    { id: "1", name: "General", description: "General discussion", owner_id: "user-123" },
-    { id: "2", name: "Math Study", description: "Math homework help", owner_id: "user-456" },
-  ]);
-  
-  // Room memberships - tracks which users are in which rooms
-  const [roomMemberships, setRoomMemberships] = useState({
-    "1": [
-      { user_id: "user-123", display_name: "John Doe", role: "admin", status: "online" },
-      { user_id: "user-456", display_name: "Jane Smith", role: "member", status: "online" },
-    ],
-    "2": [
-      { user_id: "user-456", display_name: "Jane Smith", role: "admin", status: "online" },
-      { user_id: "user-789", display_name: "Bob Wilson", role: "member", status: "offline" },
-    ],
-  });
+  const [userId] = useState("user-123"); // Replace with logged-in user ID
+  const [currentUserName] = useState("John Doe"); // Replace with logged-in user name
 
-  // Pending join requests (users requesting to join)
-  const [pendingRequests, setPendingRequests] = useState({
-    "1": [],
-    "2": [
-      { user_id: "user-123", display_name: "John Doe", requested_at: new Date().toISOString() },
-    ],
-  });
-
-  // Pending invitations (admins inviting users)
-  const [pendingInvitations, setPendingInvitations] = useState({
-    "user-123": [
-      { room_id: "2", room_name: "Math Study", invited_by: "Jane Smith", invited_at: new Date().toISOString() },
-    ],
-    "user-456": [],
-    "user-789": [],
-    "user-999": [],
-  });
-
-  // All users in the system
-  const [allUsers] = useState([
-    { id: "user-123", display_name: "John Doe", status: "online", email: "john@example.com" },
-    { id: "user-456", display_name: "Jane Smith", status: "online", email: "jane@example.com" },
-    { id: "user-789", display_name: "Bob Wilson", status: "offline", email: "bob@example.com" },
-    { id: "user-999", display_name: "Alice Johnson", status: "online", email: "alice@example.com" },
-    { id: "user-111", display_name: "Charlie Brown", status: "offline", email: "charlie@example.com" },
-  ]);
+  const [rooms, setRooms] = useState([]);
+  const [roomMemberships, setRoomMemberships] = useState({});
+  const [allUsers, setAllUsers] = useState([]);
+  const [pendingInvitations, setPendingInvitations] = useState({});
+  const [pendingRequests, setPendingRequests] = useState({});
 
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [showPendingModal, setShowPendingModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
 
-  // Initialize Socket.IO connection
+  // --- Fetch rooms, memberships, and invitations dynamically ---
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await axios.get("http://localhost:5000/api/rooms");
+        const { rooms, memberships, invitations } = res.data;
+
+        setRooms(rooms);
+
+        // Convert memberships array to object keyed by room ID
+        const membershipsByRoom = {};
+        memberships.forEach((m) => {
+          const roomId = m.room_id;
+          if (!membershipsByRoom[roomId]) membershipsByRoom[roomId] = [];
+          membershipsByRoom[roomId].push({
+            user_id: m.user_id,
+            display_name: m.display_name,
+            role: m.role,
+            status: m.status,
+          });
+        });
+        setRoomMemberships(membershipsByRoom);
+
+        // Convert invitations to object keyed by user ID
+        const invitationsByUser = {};
+        invitations.forEach((inv) => {
+          if (!invitationsByUser[inv.user_id]) invitationsByUser[inv.user_id] = [];
+          invitationsByUser[inv.user_id].push({
+            room_id: inv.room_id,
+            room_name: inv.room_name,
+            invited_by: inv.invited_by,
+            invited_at: inv.invited_at,
+          });
+        });
+        setPendingInvitations(invitationsByUser);
+
+        // You can also derive pending requests per room
+        const requests = {};
+        memberships.forEach((m) => {
+          if (!requests[m.room_id]) requests[m.room_id] = [];
+        });
+        setPendingRequests(requests);
+
+      } catch (err) {
+        console.error("Failed to fetch rooms:", err);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // --- Fetch all users ---
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const res = await axios.get("http://localhost:5000/api/users");
+        setAllUsers(res.data);
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+      }
+    };
+    fetchUsers();
+  }, []);
+
+  // Initialize Socket.IO
   useEffect(() => {
     const socket = initSocket(currentUserName, userId);
-
-    return () => {
-      closeSocket();
-    };
+    return () => closeSocket();
   }, [currentUserName, userId]);
 
-  // Get rooms where current user is a member
-  const userRooms = rooms.filter((room) => 
-    roomMemberships[room.id]?.some((member) => member.user_id === userId)
+  // Derived data
+  const userRooms = rooms.filter((room) =>
+    roomMemberships[room._id]?.some((m) => m.user_id === userId)
   );
 
-  // Get all available rooms (for joining)
-  const availableRooms = rooms.filter((room) => 
-    !roomMemberships[room.id]?.some((member) => member.user_id === userId)
+  const availableRooms = rooms.filter((room) =>
+    !roomMemberships[room._id]?.some((m) => m.user_id === userId)
   );
 
-  // Check if current user is admin of selected room
-  const isAdmin = selectedRoomId 
+  const isAdmin = selectedRoomId
     ? roomMemberships[selectedRoomId]?.find((m) => m.user_id === userId)?.role === "admin"
     : false;
 
-  // Count pending requests for admin rooms
   const pendingRequestsCount = Object.keys(pendingRequests).reduce((count, roomId) => {
     const isAdminOfRoom = roomMemberships[roomId]?.find((m) => m.user_id === userId)?.role === "admin";
-    return isAdminOfRoom ? count + pendingRequests[roomId].length : count;
+    return isAdminOfRoom ? count + (pendingRequests[roomId]?.length || 0) : count;
   }, 0);
 
-  // Count pending invitations for current user
   const myInvitationsCount = pendingInvitations[userId]?.length || 0;
 
-  const handleRoomCreated = (newRoom) => {
-    setRooms([newRoom, ...rooms]);
-    // Creator automatically becomes admin
-    setRoomMemberships({
-      ...roomMemberships,
-      [newRoom.id]: [{ user_id: userId, display_name: currentUserName, role: "admin", status: "online" }],
-    });
-    setPendingRequests({ ...pendingRequests, [newRoom.id]: [] });
-  };
-
-  const handleJoinRequest = (roomId) => {
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) return;
-
-    // Add to pending requests
-    setPendingRequests({
-      ...pendingRequests,
-      [roomId]: [
-        ...(pendingRequests[roomId] || []),
-        {
-          user_id: userId,
-          display_name: currentUserName,
-          requested_at: new Date().toISOString(),
-        },
-      ],
-    });
-
-    setShowJoinModal(false);
-  };
-
-  const handleApproveRequest = (roomId, requestUserId) => {
-    const request = pendingRequests[roomId]?.find((r) => r.user_id === requestUserId);
-    if (!request) return;
-
-    const user = allUsers.find((u) => u.id === requestUserId);
-
-    // Add user to room members
-    setRoomMemberships({
-      ...roomMemberships,
-      [roomId]: [
-        ...(roomMemberships[roomId] || []),
-        { 
-          user_id: request.user_id, 
-          display_name: request.display_name, 
-          role: "member",
-          status: user?.status || "offline"
-        },
-      ],
-    });
-
-    // Remove from pending requests
-    setPendingRequests({
-      ...pendingRequests,
-      [roomId]: pendingRequests[roomId].filter((r) => r.user_id !== requestUserId),
-    });
-  };
-
-  const handleRejectRequest = (roomId, requestUserId) => {
-    setPendingRequests({
-      ...pendingRequests,
-      [roomId]: pendingRequests[roomId].filter((r) => r.user_id !== requestUserId),
-    });
-  };
-
-  const handleInviteUsers = (roomId, userIds) => {
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) return;
-
-    // Add invitations for each user
-    const updatedInvitations = { ...pendingInvitations };
-    
-    userIds.forEach((invitedUserId) => {
-      const invitation = {
-        room_id: roomId,
-        room_name: room.name,
-        invited_by: currentUserName,
-        invited_at: new Date().toISOString(),
-      };
-
-      if (updatedInvitations[invitedUserId]) {
-        updatedInvitations[invitedUserId] = [...updatedInvitations[invitedUserId], invitation];
-      } else {
-        updatedInvitations[invitedUserId] = [invitation];
-      }
-    });
-
-    setPendingInvitations(updatedInvitations);
-    setShowInviteModal(false);
-  };
-
-  const handleAcceptInvitation = (roomId) => {
-    const user = allUsers.find((u) => u.id === userId);
-    if (!user) return;
-
-    // Add user to room members
-    setRoomMemberships({
-      ...roomMemberships,
-      [roomId]: [
-        ...(roomMemberships[roomId] || []),
-        { 
-          user_id: userId, 
-          display_name: currentUserName, 
-          role: "member",
-          status: user.status
-        },
-      ],
-    });
-
-    // Remove invitation
-    setPendingInvitations({
-      ...pendingInvitations,
-      [userId]: pendingInvitations[userId].filter((inv) => inv.room_id !== roomId),
-    });
-  };
-
-  const handleDeclineInvitation = (roomId) => {
-    setPendingInvitations({
-      ...pendingInvitations,
-      [userId]: pendingInvitations[userId].filter((inv) => inv.room_id !== roomId),
-    });
-  };
-
-  const handleRemoveMember = (roomId, memberId) => {
-    if (!isAdmin) return;
-
-    setRoomMemberships({
-      ...roomMemberships,
-      [roomId]: roomMemberships[roomId].filter((m) => m.user_id !== memberId),
-    });
-  };
-
-  const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
-  const currentRoomMembers = selectedRoomId ? (roomMemberships[selectedRoomId] || []) : [];
-
-  // Check if user is member of selected room
-  const isMemberOfRoom = selectedRoomId 
+  const selectedRoom = rooms.find((r) => r._id === selectedRoomId);
+  const currentRoomMembers = selectedRoomId ? roomMemberships[selectedRoomId] || [] : [];
+  const isMemberOfRoom = selectedRoomId
     ? roomMemberships[selectedRoomId]?.some((m) => m.user_id === userId)
     : false;
 
-  // Get available users to invite (not already in the room and no pending invitation)
   const availableUsersToInvite = selectedRoomId ? allUsers.filter((user) => {
-    const isAlreadyMember = roomMemberships[selectedRoomId]?.some((m) => m.user_id === user.id);
-    const hasPendingInvitation = pendingInvitations[user.id]?.some((inv) => inv.room_id === selectedRoomId);
-    return !isAlreadyMember && !hasPendingInvitation && user.id !== userId;
+    const isAlreadyMember = roomMemberships[selectedRoomId]?.some((m) => m.user_id === user._id);
+    const hasPendingInvitation = pendingInvitations[user._id]?.some((inv) => inv.room_id === selectedRoomId);
+    return !isAlreadyMember && !hasPendingInvitation && user._id !== userId;
   }) : [];
 
   return (
@@ -247,7 +134,7 @@ const Dashboard = () => {
         onRoomSelect={setSelectedRoomId}
         userId={userId}
         rooms={userRooms}
-        onRoomCreated={handleRoomCreated}
+        onRoomCreated={(newRoom) => setRooms([newRoom, ...rooms])}
         onJoinRoom={() => setShowJoinModal(true)}
         pendingRequestsCount={pendingRequestsCount}
         myInvitationsCount={myInvitationsCount}
@@ -262,22 +149,19 @@ const Dashboard = () => {
         roomName={selectedRoom?.name || ""}
         isMember={isMemberOfRoom}
       />
-      <MembersList 
-        roomId={selectedRoomId} 
+      <MembersList
+        roomId={selectedRoomId}
         members={currentRoomMembers}
         isAdmin={isAdmin}
         currentUserId={userId}
-        onRemoveMember={handleRemoveMember}
         onInviteMembers={() => setShowInviteModal(true)}
       />
-
       <JoinRoomModal
         show={showJoinModal}
         onHide={() => setShowJoinModal(false)}
         rooms={availableRooms}
-        onJoinRequest={handleJoinRequest}
+        onJoinRequest={(roomId) => console.log("Join request:", roomId)}
       />
-
       <PendingRequestsModal
         show={showPendingModal}
         onHide={() => setShowPendingModal(false)}
@@ -285,25 +169,23 @@ const Dashboard = () => {
         pendingRequests={pendingRequests}
         roomMemberships={roomMemberships}
         currentUserId={userId}
-        onApprove={handleApproveRequest}
-        onReject={handleRejectRequest}
+        onApprove={(roomId, userId) => console.log("Approve:", roomId, userId)}
+        onReject={(roomId, userId) => console.log("Reject:", roomId, userId)}
       />
-
       <InviteMembersModal
         show={showInviteModal}
         onHide={() => setShowInviteModal(false)}
         roomId={selectedRoomId}
         roomName={selectedRoom?.name || ""}
         availableUsers={availableUsersToInvite}
-        onInvite={handleInviteUsers}
+        onInvite={(roomId, users) => console.log("Invite:", roomId, users)}
       />
-
       <InvitationsModal
         show={showInvitationsModal}
         onHide={() => setShowInvitationsModal(false)}
         invitations={pendingInvitations[userId] || []}
-        onAccept={handleAcceptInvitation}
-        onDecline={handleDeclineInvitation}
+        onAccept={(roomId) => console.log("Accept:", roomId)}
+        onDecline={(roomId) => console.log("Decline:", roomId)}
       />
     </div>
   );

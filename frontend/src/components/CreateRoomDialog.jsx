@@ -7,13 +7,16 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleCreate = async () => {
-    if (!name.trim()) return;
+  const handleCreate = () => {
+    if (!name.trim()) {
+      toast.error("Room name cannot be empty!");
+      return;
+    }
 
     setLoading(true);
-    
-    // Simulate API call
+
     setTimeout(() => {
+      // Simulate room creation
       const newRoom = {
         id: Date.now().toString(),
         name: name.trim(),
@@ -22,13 +25,15 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
         created_at: new Date().toISOString(),
       };
 
-      onRoomCreated(newRoom);
+      onRoomCreated(newRoom); // Update Dashboard state
+
       toast.success("Room created! Your study room is ready.");
+
       setName("");
       setDescription("");
       setLoading(false);
       onOpenChange(false);
-    }, 500);
+    }, 500); // simulate delay
   };
 
   return (
@@ -36,26 +41,23 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
       <Modal.Header closeButton>
         <Modal.Title>Create Study Room</Modal.Title>
       </Modal.Header>
+
       <Modal.Body>
-        <p className="text-muted mb-4">
-          Create a new room for collaborative studying and discussions.
-        </p>
         <div className="mb-3">
-          <label htmlFor="name" className="form-label">Room Name</label>
+          <label className="form-label">Room Name</label>
           <input
             type="text"
-            id="name"
             className="form-control"
-            placeholder="e.g., Math Study Group"
+            placeholder="Enter room name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
           />
         </div>
+
         <div className="mb-3">
-          <label htmlFor="description" className="form-label">Description (Optional)</label>
+          <label className="form-label">Description (Optional)</label>
           <textarea
-            id="description"
             className="form-control"
             placeholder="What's this room about?"
             value={description}
@@ -65,6 +67,7 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
           />
         </div>
       </Modal.Body>
+
       <Modal.Footer>
         <button
           className="btn btn-secondary"
