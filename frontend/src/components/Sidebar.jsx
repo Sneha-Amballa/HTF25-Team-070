@@ -3,7 +3,19 @@ import CreateRoomDialog from "./CreateRoomDialog";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "react-bootstrap";
 
-const Sidebar = ({ selectedRoomId, onRoomSelect, userId, rooms, onRoomCreated, onJoinRoom, pendingRequestsCount, myInvitationsCount, onShowPendingRequests, onShowInvitations, isAdmin }) => {
+const Sidebar = ({
+  selectedRoomId,
+  onRoomSelect,
+  userId,
+  rooms,
+  onRoomCreated,
+  onJoinRoom,
+  pendingRequestsCount,
+  myInvitationsCount,
+  onShowPendingRequests,
+  onShowInvitations,
+  isAdmin
+}) => {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -12,11 +24,17 @@ const Sidebar = ({ selectedRoomId, onRoomSelect, userId, rooms, onRoomCreated, o
   };
 
   return (
-    <div className="d-flex flex-column bg-white border-end" style={{ width: "260px", height: "100vh" }}>
+    <div
+      className="d-flex flex-column bg-white border-end"
+      style={{ width: "260px", height: "100vh" }}
+    >
       {/* Header */}
       <div className="p-3 border-bottom">
         <div className="d-flex align-items-center gap-2">
-          <div className="bg-primary text-white rounded d-flex align-items-center justify-content-center" style={{ width: "32px", height: "32px" }}>
+          <div
+            className="bg-primary text-white rounded d-flex align-items-center justify-content-center"
+            style={{ width: "32px", height: "32px" }}
+          >
             #
           </div>
           <h5 className="m-0 fw-bold">Study Rooms</h5>
@@ -27,16 +45,16 @@ const Sidebar = ({ selectedRoomId, onRoomSelect, userId, rooms, onRoomCreated, o
       <div className="flex-grow-1 overflow-auto p-3">
         <div className="d-flex flex-column gap-1">
           {rooms.length === 0 ? (
-            <p className="text-muted small text-center mt-3">No rooms yet. Create or join one!</p>
+            <p className="text-muted small text-center mt-3">
+              No rooms yet. Create or join one!
+            </p>
           ) : (
             rooms.map((room) => (
               <button
-                key={room.id}
-                onClick={() => onRoomSelect(room.id)}
+                key={room._id} // ✅ Fixed key warning
+                onClick={() => onRoomSelect(room._id)}
                 className={`btn text-start d-flex align-items-center gap-2 ${
-                  selectedRoomId === room.id
-                    ? "btn-primary"
-                    : "btn-light"
+                  selectedRoomId === room._id ? "btn-primary" : "btn-light"
                 }`}
               >
                 <span style={{ fontSize: "1.1rem" }}>#</span>
@@ -56,11 +74,15 @@ const Sidebar = ({ selectedRoomId, onRoomSelect, userId, rooms, onRoomCreated, o
           >
             <span className="me-2">📨</span>
             My Invitations
-            <Badge bg="danger" className="position-absolute top-0 end-0 translate-middle">
+            <Badge
+              bg="danger"
+              className="position-absolute top-0 end-0 translate-middle"
+            >
               {myInvitationsCount}
             </Badge>
           </button>
         )}
+
         {isAdmin && pendingRequestsCount > 0 && (
           <button
             onClick={onShowPendingRequests}
@@ -68,18 +90,20 @@ const Sidebar = ({ selectedRoomId, onRoomSelect, userId, rooms, onRoomCreated, o
           >
             <span className="me-2">👥</span>
             Pending Requests
-            <Badge bg="danger" className="position-absolute top-0 end-0 translate-middle">
+            <Badge
+              bg="danger"
+              className="position-absolute top-0 end-0 translate-middle"
+            >
               {pendingRequestsCount}
             </Badge>
           </button>
         )}
-        <button
-          onClick={onJoinRoom}
-          className="btn btn-success w-100"
-        >
+
+        <button onClick={onJoinRoom} className="btn btn-success w-100">
           <span className="me-2">➕</span>
           Join Room
         </button>
+
         <button
           onClick={() => setCreateDialogOpen(true)}
           className="btn btn-primary w-100"
@@ -87,12 +111,17 @@ const Sidebar = ({ selectedRoomId, onRoomSelect, userId, rooms, onRoomCreated, o
           <span className="me-2">+</span>
           Create Room
         </button>
-        <button onClick={handleSignOut} className="btn btn-outline-secondary w-100">
+
+        <button
+          onClick={handleSignOut}
+          className="btn btn-outline-secondary w-100"
+        >
           <span className="me-2">→</span>
           Sign Out
         </button>
       </div>
 
+      {/* Create Room Modal */}
       <CreateRoomDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}

@@ -1,13 +1,41 @@
 import { Modal, Button } from "react-bootstrap";
 import { formatDistanceToNow } from "date-fns";
+import axios from "axios";
+import { toast } from "sonner";
+
+const API_URL = "http://localhost:5001/api";
 
 const InvitationsModal = ({
   show,
   onHide,
-  invitations = [], // ✅ Prevent undefined errors
-  onAccept = () => {}, // ✅ Safe no-op defaults
-  onDecline = () => {},
+  invitations = [],
+  userId,
+  token,
+  onUpdate = () => {}, // Callback to refresh parent state after accept/decline
 }) => {
+
+  const handleAccept = async (roomId) => {
+    try {
+      await axios.post(
+        `${API_URL}/rooms/${roomId}/join`,
+        { userId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast.success("Joined room successfully!");
+      onUpdate(); // Refresh rooms and invitations
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to join room.");
+    }
+  };
+
+  const handleDecline = (roomId) => {
+    // For now, just update UI; backend can store declined invitations if needed
+    const remaining = invitations.filter((inv) => inv.room_id !== roomId);
+    onUpdate(remaining);
+    toast.info("Invitation declined.");
+  };
+
   return (
     <Modal show={show} onHide={onHide} centered size="lg">
       <Modal.Header closeButton>
@@ -47,14 +75,14 @@ const InvitationsModal = ({
                     <Button
                       size="sm"
                       variant="success"
-                      onClick={() => onAccept(invitation.room_id)}
+                      onClick={() => handleAccept(invitation.room_id)}
                     >
                       Accept
                     </Button>
                     <Button
                       size="sm"
                       variant="danger"
-                      onClick={() => onDecline(invitation.room_id)}
+                      onClick={() => handleDecline(invitation.room_id)}
                     >
                       Decline
                     </Button>

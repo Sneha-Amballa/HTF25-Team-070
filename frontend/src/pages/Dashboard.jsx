@@ -4,190 +4,176 @@ import Sidebar from "../components/Sidebar";
 import ChatArea from "../components/ChatArea";
 import MembersList from "../components/MembersList";
 import JoinRoomModal from "../components/JoinRoomModal";
-import PendingRequestsModal from "../components/PendingRequestsModal";
 import InviteMembersModal from "../components/InviteMembersModal";
 import InvitationsModal from "../components/InvitationsModal";
+import CreateRoomDialog from "../components/CreateRoomDialog";
 import { initSocket, closeSocket } from "../services/socket";
+import { toast } from "sonner";
+
+const API_URL = "http://localhost:5001/api";
 
 const Dashboard = () => {
-  const [selectedRoomId, setSelectedRoomId] = useState(null);
-  const [userId] = useState("user-123"); // Mock current user ID
-  const [currentUserName] = useState("John Doe"); // Mock current user name
+  const token = localStorage.getItem("token");
+  const [userId, setUserId] = useState(null);
+  const [currentUserName, setCurrentUserName] = useState("");
 
-  const [rooms, setRooms] = useState([
-    { id: "1", name: "General", description: "General discussion", owner_id: "user-123" },
-    { id: "2", name: "Math Study", description: "Math homework help", owner_id: "user-456" },
-  ]);
-
-  const [roomMemberships, setRoomMemberships] = useState({
-    "1": [
-      { user_id: "user-123", display_name: "John Doe", role: "admin", status: "online" },
-      { user_id: "user-456", display_name: "Jane Smith", role: "member", status: "online" },
-    ],
-    "2": [
-      { user_id: "user-456", display_name: "Jane Smith", role: "admin", status: "online" },
-      { user_id: "user-789", display_name: "Bob Wilson", role: "member", status: "offline" },
-    ],
-  });
-
-  const [pendingRequests, setPendingRequests] = useState({
-    "1": [],
-    "2": [
-      { user_id: "user-123", display_name: "John Doe", requested_at: new Date().toISOString() },
-    ],
-  });
-
-  const [pendingInvitations, setPendingInvitations] = useState({
-    "user-123": [
-      { room_id: "2", room_name: "Math Study", invited_by: "Jane Smith", invited_at: new Date().toISOString() },
-    ],
-    "user-456": [],
-    "user-789": [],
-    "user-999": [],
-  });
-
-  // --- Fetch users dynamically from backend ---
+  const [rooms, setRooms] = useState([]);
+  const [roomMemberships, setRoomMemberships] = useState({});
   const [allUsers, setAllUsers] = useState([]);
+  const [pendingInvitations, setPendingInvitations] = useState({});
 
-  useEffect(() => {
-    axios.get("http://localhost:5000/api/users")
-      .then((res) => setAllUsers(res.data))
-      .catch((err) => console.error("Failed to fetch users:", err));
-  }, []);
+  const [selectedRoomId, setSelectedRoomId] = useState(null);
 
+  // Modals
   const [showJoinModal, setShowJoinModal] = useState(false);
-  const [showPendingModal, setShowPendingModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+  const [showCreateRoomDialog, setShowCreateRoomDialog] = useState(false);
 
-  // Initialize Socket.IO connection
+  // ---- Fetch current user info from token ----
   useEffect(() => {
-    const socket = initSocket(currentUserName, userId);
+    if (!token) return;
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      setUserId(payload.id);
+      setCurrentUserName(payload.displayName || "Unknown");
+    } catch (err) {
+      console.error("Invalid token:", err);
+    }
+  }, [token]);
+
+  // ---- Fetch rooms from backend ----
+  const fetchRooms = async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API_URL}/rooms`, { headers: { Authorization: `Bearer ${token}` } });
+      setRooms(res.data);
+
+      const memberships = {};
+      res.data.forEach((room) => {
+        memberships[room._id] = room.members.map((m) => ({
+          user_id: m.user_id,
+          display_name: m.display_name || "Member",
+          role: m.role,
+          status: m.status || "offline",
+        }));
+      });
+      setRoomMemberships(memberships);
+    } catch (err) {
+      console.error("Failed to fetch rooms:", err);
+      toast.error("Failed to load rooms.");
+    }
+  };
+
+  useEffect(() => {
+    fetchRooms();
+  }, [token]);
+
+  // ---- Fetch all users ----
+  useEffect(() => {
+    if (!token) return;
+    axios
+      .get(`${API_URL}/users`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => setAllUsers(res.data))
+      .catch((err) => {
+        console.error("Failed to fetch users:", err);
+        toast.error("Failed to load users.");
+      });
+  }, [token]);
+
+  // ---- Socket.IO ----
+  useEffect(() => {
+    if (!userId) return;
+    initSocket(currentUserName, userId);
     return () => closeSocket();
   }, [currentUserName, userId]);
 
-  const userRooms = rooms.filter((room) => 
-    roomMemberships[room.id]?.some((member) => member.user_id === userId)
-  );
-
-  const availableRooms = rooms.filter((room) => 
-    !roomMemberships[room.id]?.some((member) => member.user_id === userId)
-  );
-
-  const isAdmin = selectedRoomId 
+  // ---- Derived data ----
+  const selectedRoom = rooms.find((r) => r._id === selectedRoomId);
+  const currentRoomMembers = selectedRoomId ? roomMemberships[selectedRoomId] || [] : [];
+  const isAdmin = selectedRoomId
     ? roomMemberships[selectedRoomId]?.find((m) => m.user_id === userId)?.role === "admin"
     : false;
-
-  const pendingRequestsCount = Object.keys(pendingRequests).reduce((count, roomId) => {
-    const isAdminOfRoom = roomMemberships[roomId]?.find((m) => m.user_id === userId)?.role === "admin";
-    return isAdminOfRoom ? count + pendingRequests[roomId].length : count;
-  }, 0);
-
-  const myInvitationsCount = pendingInvitations[userId]?.length || 0;
-
-  const handleRoomCreated = (newRoom) => {
-    setRooms([newRoom, ...rooms]);
-    setRoomMemberships({
-      ...roomMemberships,
-      [newRoom.id]: [{ user_id: userId, display_name: currentUserName, role: "admin", status: "online" }],
-    });
-    setPendingRequests({ ...pendingRequests, [newRoom.id]: [] });
-  };
-
-  const handleJoinRequest = (roomId) => {
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) return;
-    setPendingRequests({
-      ...pendingRequests,
-      [roomId]: [
-        ...(pendingRequests[roomId] || []),
-        { user_id: userId, display_name: currentUserName, requested_at: new Date().toISOString() },
-      ],
-    });
-    setShowJoinModal(false);
-  };
-
-  const handleApproveRequest = (roomId, requestUserId) => {
-    const request = pendingRequests[roomId]?.find((r) => r.user_id === requestUserId);
-    if (!request) return;
-    const user = allUsers.find((u) => u._id === requestUserId);
-    setRoomMemberships({
-      ...roomMemberships,
-      [roomId]: [
-        ...(roomMemberships[roomId] || []),
-        { user_id: request.user_id, display_name: request.display_name, role: "member", status: user?.status || "offline" },
-      ],
-    });
-    setPendingRequests({
-      ...pendingRequests,
-      [roomId]: pendingRequests[roomId].filter((r) => r.user_id !== requestUserId),
-    });
-  };
-
-  const handleRejectRequest = (roomId, requestUserId) => {
-    setPendingRequests({
-      ...pendingRequests,
-      [roomId]: pendingRequests[roomId].filter((r) => r.user_id !== requestUserId),
-    });
-  };
-
-  const handleInviteUsers = (roomId, userIds) => {
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) return;
-
-    const updatedInvitations = { ...pendingInvitations };
-    userIds.forEach((invitedUserId) => {
-      const invitation = { room_id: roomId, room_name: room.name, invited_by: currentUserName, invited_at: new Date().toISOString() };
-      if (updatedInvitations[invitedUserId]) updatedInvitations[invitedUserId] = [...updatedInvitations[invitedUserId], invitation];
-      else updatedInvitations[invitedUserId] = [invitation];
-    });
-
-    setPendingInvitations(updatedInvitations);
-    setShowInviteModal(false);
-  };
-
-  const handleAcceptInvitation = (roomId) => {
-    const user = allUsers.find((u) => u._id === userId);
-    if (!user) return;
-    setRoomMemberships({
-      ...roomMemberships,
-      [roomId]: [
-        ...(roomMemberships[roomId] || []),
-        { user_id: userId, display_name: currentUserName, role: "member", status: user.status },
-      ],
-    });
-    setPendingInvitations({
-      ...pendingInvitations,
-      [userId]: pendingInvitations[userId].filter((inv) => inv.room_id !== roomId),
-    });
-  };
-
-  const handleDeclineInvitation = (roomId) => {
-    setPendingInvitations({
-      ...pendingInvitations,
-      [userId]: pendingInvitations[userId].filter((inv) => inv.room_id !== roomId),
-    });
-  };
-
-  const handleRemoveMember = (roomId, memberId) => {
-    if (!isAdmin) return;
-    setRoomMemberships({
-      ...roomMemberships,
-      [roomId]: roomMemberships[roomId].filter((m) => m.user_id !== memberId),
-    });
-  };
-
-  const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
-  const currentRoomMembers = selectedRoomId ? (roomMemberships[selectedRoomId] || []) : [];
-  const isMemberOfRoom = selectedRoomId 
+  const isMemberOfRoom = selectedRoomId
     ? roomMemberships[selectedRoomId]?.some((m) => m.user_id === userId)
     : false;
 
-  const availableUsersToInvite = selectedRoomId ? allUsers.filter((user) => {
-    const isAlreadyMember = roomMemberships[selectedRoomId]?.some((m) => m.user_id === user._id);
-    const hasPendingInvitation = pendingInvitations[user._id]?.some((inv) => inv.room_id === selectedRoomId);
-    return !isAlreadyMember && !hasPendingInvitation && user._id !== userId;
-  }) : [];
+  const userRooms = rooms.filter((room) => roomMemberships[room._id]?.some((m) => m.user_id === userId));
+  const availableRooms = rooms.filter((room) => !roomMemberships[room._id]?.some((m) => m.user_id === userId));
+
+  const availableUsersToInvite = selectedRoomId
+    ? allUsers.filter((user) => !currentRoomMembers.some((m) => m.user_id === user._id) && user._id !== userId)
+    : [];
+
+  // ---- Handlers ----
+
+  // Room created
+  const handleRoomCreated = () => fetchRooms();
+
+  // Join room
+  const handleJoinRoom = async (roomId) => {
+    try {
+      await axios.post(`${API_URL}/rooms/${roomId}/join`, { userId }, { headers: { Authorization: `Bearer ${token}` } });
+      fetchRooms();
+      toast.success("Joined room!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to join room.");
+    }
+  };
+
+  // Invite members
+  const handleInviteUsers = async (roomId, userIds) => {
+    try {
+      for (let invitedUserId of userIds) {
+        await axios.post(
+          `${API_URL}/rooms/${roomId}/invite`,
+          { invitedUserId, invitedBy: userId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+      fetchRooms();
+      toast.success("Users invited successfully!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to invite users.");
+    }
+  };
+
+  // Remove member
+  const handleRemoveMember = async (roomId, memberId) => {
+    try {
+      if (!isAdmin) return;
+      await axios.post(`${API_URL}/rooms/${roomId}/remove`, { memberId }, { headers: { Authorization: `Bearer ${token}` } });
+      fetchRooms();
+      toast.success("Member removed!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to remove member.");
+    }
+  };
+
+  // Accept invitation
+  const handleAcceptInvitation = async (roomId) => {
+    try {
+      await handleJoinRoom(roomId); // Reuse join API
+      setPendingInvitations((prev) => ({
+        ...prev,
+        [userId]: (prev[userId] || []).filter((inv) => inv.room_id !== roomId),
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Decline invitation
+  const handleDeclineInvitation = (roomId) => {
+    setPendingInvitations((prev) => ({
+      ...prev,
+      [userId]: (prev[userId] || []).filter((inv) => inv.room_id !== roomId),
+    }));
+    toast.info("Invitation declined.");
+  };
 
   return (
     <div className="d-flex" style={{ height: "100vh" }}>
@@ -196,14 +182,11 @@ const Dashboard = () => {
         onRoomSelect={setSelectedRoomId}
         userId={userId}
         rooms={userRooms}
-        onRoomCreated={handleRoomCreated}
+        onRoomCreated={() => setShowCreateRoomDialog(true)}
         onJoinRoom={() => setShowJoinModal(true)}
-        pendingRequestsCount={pendingRequestsCount}
-        myInvitationsCount={myInvitationsCount}
-        onShowPendingRequests={() => setShowPendingModal(true)}
-        onShowInvitations={() => setShowInvitationsModal(true)}
         isAdmin={isAdmin}
       />
+
       <ChatArea
         roomId={selectedRoomId}
         userId={userId}
@@ -211,8 +194,9 @@ const Dashboard = () => {
         roomName={selectedRoom?.name || ""}
         isMember={isMemberOfRoom}
       />
-      <MembersList 
-        roomId={selectedRoomId} 
+
+      <MembersList
+        roomId={selectedRoomId}
         members={currentRoomMembers}
         isAdmin={isAdmin}
         currentUserId={userId}
@@ -224,18 +208,7 @@ const Dashboard = () => {
         show={showJoinModal}
         onHide={() => setShowJoinModal(false)}
         rooms={availableRooms}
-        onJoinRequest={handleJoinRequest}
-      />
-
-      <PendingRequestsModal
-        show={showPendingModal}
-        onHide={() => setShowPendingModal(false)}
-        rooms={rooms}
-        pendingRequests={pendingRequests}
-        roomMemberships={roomMemberships}
-        currentUserId={userId}
-        onApprove={handleApproveRequest}
-        onReject={handleRejectRequest}
+        onJoinRequest={handleJoinRoom}
       />
 
       <InviteMembersModal
@@ -251,8 +224,20 @@ const Dashboard = () => {
         show={showInvitationsModal}
         onHide={() => setShowInvitationsModal(false)}
         invitations={pendingInvitations[userId] || []}
-        onAccept={handleAcceptInvitation}
-        onDecline={handleDeclineInvitation}
+        userId={userId}
+        token={token}
+        onUpdate={(updatedInvites) => setPendingInvitations((prev) => ({
+          ...prev,
+          [userId]: updatedInvites || prev[userId],
+        }))}
+      />
+
+      <CreateRoomDialog
+        open={showCreateRoomDialog}
+        onOpenChange={setShowCreateRoomDialog}
+        userId={userId}
+        token={token}
+        onRoomCreated={handleRoomCreated}
       />
     </div>
   );

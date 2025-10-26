@@ -11,8 +11,15 @@ const Auth = () => {
   const [displayName, setDisplayName] = useState("");
   const [activeTab, setActiveTab] = useState("signin");
 
-  const API_URL = "http://localhost:5000/api/auth";
+  // -----------------------------
+  // Hardcoded backend URL
+  // -----------------------------
+  // ⚠️ Replace 5001 with the actual port your backend runs on
+  const API_URL = "http://localhost:5001/api/auth";
 
+  // -----------------------------
+  // Sign Up
+  // -----------------------------
   const handleSignUp = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -24,21 +31,22 @@ const Auth = () => {
       });
 
       const data = await res.json();
-      if (res.ok) {
-        toast.success("Account created! You can now sign in.");
-        setActiveTab("signin");
-        setEmail("");
-        setPassword("");
-        setDisplayName("");
-      } else {
-        toast.error(data.message || "Signup failed");
-      }
+      if (!res.ok) throw new Error(data.message || "Signup failed");
+
+      toast.success("Account created! You can now sign in.");
+      setActiveTab("signin");
+      setEmail("");
+      setPassword("");
+      setDisplayName("");
     } catch (err) {
-      toast.error(err.message || "Server error");
+      toast.error(err.message);
     }
     setLoading(false);
   };
 
+  // -----------------------------
+  // Sign In
+  // -----------------------------
   const handleSignIn = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -49,22 +57,14 @@ const Auth = () => {
         body: JSON.stringify({ email, password }),
       });
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error("Server returned non-JSON response");
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Invalid credentials");
 
-      if (res.ok) {
-        toast.success(`Welcome back, ${data.user.displayName}!`);
-        localStorage.setItem("token", data.token);
-        navigate("/dashboard");
-      } else {
-        toast.error(data.message || "Invalid credentials");
-      }
+      toast.success(`Welcome back, ${data.user.displayName}!`);
+      localStorage.setItem("token", data.token);
+      navigate("/dashboard");
     } catch (err) {
-      toast.error(err.message || "Server error");
+      toast.error(err.message);
     }
     setLoading(false);
   };
@@ -88,10 +88,20 @@ const Auth = () => {
         {/* Tabs */}
         <ul className="nav nav-tabs mb-4">
           <li className="nav-item">
-            <button className={`nav-link ${activeTab === "signin" ? "active" : ""}`} onClick={() => setActiveTab("signin")}>Sign In</button>
+            <button
+              className={`nav-link ${activeTab === "signin" ? "active" : ""}`}
+              onClick={() => setActiveTab("signin")}
+            >
+              Sign In
+            </button>
           </li>
           <li className="nav-item">
-            <button className={`nav-link ${activeTab === "signup" ? "active" : ""}`} onClick={() => setActiveTab("signup")}>Sign Up</button>
+            <button
+              className={`nav-link ${activeTab === "signup" ? "active" : ""}`}
+              onClick={() => setActiveTab("signup")}
+            >
+              Sign Up
+            </button>
           </li>
         </ul>
 
@@ -100,11 +110,27 @@ const Auth = () => {
           <form onSubmit={handleSignIn}>
             <div className="mb-3">
               <label>Email</label>
-              <input type="email" className="form-control" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} required />
+              <input
+                type="email"
+                className="form-control"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                required
+                autoComplete="username"
+              />
             </div>
             <div className="mb-3">
               <label>Password</label>
-              <input type="password" className="form-control" value={password} onChange={e => setPassword(e.target.value)} disabled={loading} required />
+              <input
+                type="password"
+                className="form-control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
+                autoComplete="current-password"
+              />
             </div>
             <button className="btn btn-primary w-100" type="submit" disabled={loading}>
               {loading && <Spinner animation="border" size="sm" className="me-2" />}
@@ -118,15 +144,40 @@ const Auth = () => {
           <form onSubmit={handleSignUp}>
             <div className="mb-3">
               <label>Display Name</label>
-              <input type="text" className="form-control" value={displayName} onChange={e => setDisplayName(e.target.value)} disabled={loading} required />
+              <input
+                type="text"
+                className="form-control"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                disabled={loading}
+                required
+                autoComplete="name"
+              />
             </div>
             <div className="mb-3">
               <label>Email</label>
-              <input type="email" className="form-control" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} required />
+              <input
+                type="email"
+                className="form-control"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                required
+                autoComplete="username"
+              />
             </div>
             <div className="mb-3">
               <label>Password</label>
-              <input type="password" className="form-control" value={password} onChange={e => setPassword(e.target.value)} disabled={loading} minLength={6} required />
+              <input
+                type="password"
+                className="form-control"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
+                minLength={6}
+                autoComplete="new-password"
+              />
             </div>
             <button className="btn btn-primary w-100" type="submit" disabled={loading}>
               {loading && <Spinner animation="border" size="sm" className="me-2" />}

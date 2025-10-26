@@ -1,34 +1,43 @@
 import { useState } from "react";
 import { Modal, Spinner } from "react-bootstrap";
 import { toast } from "sonner";
+import axios from "axios";
 
-const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
+const API_URL = "http://localhost:5000/api"; // ✅ matches your backend
+
+const CreateRoomDialog = ({ open, onOpenChange, userId, token, onRoomCreated }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
-
     setLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const newRoom = {
-        id: Date.now().toString(),
-        name: name.trim(),
-        description: description.trim() || null,
-        owner_id: userId,
-        created_at: new Date().toISOString(),
-      };
 
-      onRoomCreated(newRoom);
-      toast.success("Room created! Your study room is ready.");
+    try {
+      const res = await axios.post(
+        `${API_URL}/rooms`,
+        {
+          name: name.trim(),
+          description: description.trim(),
+          owner_id: userId,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      onRoomCreated(res.data);
+      toast.success("🎉 Room created! Your study room is ready.");
       setName("");
       setDescription("");
-      setLoading(false);
       onOpenChange(false);
-    }, 500);
+    } catch (err) {
+      console.error("Failed to create room:", err);
+      toast.error(err.response?.data?.message || "Failed to create room.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,6 +49,7 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
         <p className="text-muted mb-4">
           Create a new room for collaborative studying and discussions.
         </p>
+
         <div className="mb-3">
           <label htmlFor="name" className="form-label">Room Name</label>
           <input
@@ -52,6 +62,7 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
             disabled={loading}
           />
         </div>
+
         <div className="mb-3">
           <label htmlFor="description" className="form-label">Description (Optional)</label>
           <textarea
@@ -65,6 +76,7 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
           />
         </div>
       </Modal.Body>
+
       <Modal.Footer>
         <button
           className="btn btn-secondary"
@@ -73,6 +85,7 @@ const CreateRoomDialog = ({ open, onOpenChange, userId, onRoomCreated }) => {
         >
           Cancel
         </button>
+
         <button
           className="btn btn-primary"
           onClick={handleCreate}
