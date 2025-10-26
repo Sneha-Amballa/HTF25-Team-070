@@ -6,7 +6,7 @@ import JoinRoomModal from "../components/JoinRoomModal";
 import PendingRequestsModal from "../components/PendingRequestsModal";
 import InviteMembersModal from "../components/InviteMembersModal";
 import InvitationsModal from "../components/InvitationsModal";
-import { initSocket, disconnectSocket } from "../services/socket";
+import { initSocket, closeSocket } from "../services/socket";
 
 const Dashboard = () => {
   const [selectedRoomId, setSelectedRoomId] = useState(null);
@@ -66,7 +66,7 @@ const Dashboard = () => {
     const socket = initSocket(currentUserName, userId);
 
     return () => {
-      disconnectSocket();
+      closeSocket();
     };
   }, [currentUserName, userId]);
 

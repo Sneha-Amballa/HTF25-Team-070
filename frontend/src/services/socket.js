@@ -1,28 +1,33 @@
-import { io } from 'socket.io-client';
-
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+import { io } from "socket.io-client";
 
 let socket = null;
 
-export const initSocket = (username, userId) => {
+export const initSocket = (userId, username) => {
   if (!socket) {
-    socket = io(SOCKET_URL, {
-      query: { username, userId },
-      reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionAttempts: 5,
+    if (!userId || !username) {
+      console.error("❌ userId or username missing!");
+      return null;
+    }
+
+    socket = io("http://localhost:5000", {
+      auth: { userId, username },   // use auth for handshake
+      transports: ["websocket"],
+    });
+
+    socket.on("connect", () => {
+      console.log("✅ Connected to server:", socket.id);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("❌ Disconnected from server");
     });
   }
   return socket;
 };
 
-export const getSocket = () => {
-  return socket;
-};
+export const getSocket = () => socket;
 
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
-  }
+export const closeSocket = () => {
+  if (socket) socket.disconnect();
+  socket = null;
 };
