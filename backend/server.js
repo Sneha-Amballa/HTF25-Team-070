@@ -7,15 +7,15 @@ import path from "path";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
+import {router as usersRoutes} from "./routes/users.js";
 
 // Routes
 import authRoutes from "./routes/auth.js";
-import dashboardRoutes from "./routes/dashboard.js";
 import membersRoutes from "./routes/members.js";
 
 dotenv.config();
 
-// --- File paths for ES modules ---
+// File paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -28,95 +28,77 @@ app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/auth", authRoutes);
-app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/members", membersRoutes);
+app.use("/api/users", usersRoutes);
 
-// --- MongoDB model for chat ---
-const chatSchema = new mongoose.Schema({
-  senderId: String,
-  content: String,
-  type: { type: String, default: "text" }, // text, image, file, system
-  pinned: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now },
-});
-
-const Chat = mongoose.model("Chat", chatSchema);
-
-// --- File upload ---
+// Multer file upload
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
+  destination: (req, file, cb) => cb(null, path.join(__dirname, "uploads")),
   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
 });
 const upload = multer({ storage });
 
 app.post("/upload", upload.single("file"), (req, res) => {
-  res.json({ url: `http://localhost:${process.env.PORT || 5000}/uploads/${req.file.filename}`, type: req.body.type });
+  res.json({
+    url: `http://localhost:${process.env.PORT || 5000}/uploads/${req.file.filename}`,
+    type: req.body.type || "file",
+  });
 });
 
-// --- Socket.IO ---
-let users = {}; // socketId -> username
+// Socket.IO logic
+let roomMessages = {};
+let roomUsers = {};
+let userSockets = {};
 
 io.on("connection", (socket) => {
-  const username = socket.handshake.query.username || "Anonymous";
-  users[socket.id] = username;
+  const { userId, username } = socket.handshake.auth;
+  if (!userId || !username) return socket.disconnect();
+  userSockets[userId] = socket.id;
 
-  // Send initial data
-  Chat.find().sort({ createdAt: -1 }).then((msgs) => {
-    socket.emit("loadMessages", msgs);
-  });
-  socket.emit("updateUsers", users);
-
-  // New message
-  socket.on("sendMessage", async (data) => {
-    const newMsg = new Chat(data);
-    await newMsg.save();
-    io.emit("newMessage", newMsg);
+  // Join room
+  socket.on("joinRoom", ({ roomId }) => {
+    socket.join(roomId);
+    roomMessages[roomId] ||= [];
+    roomUsers[roomId] ||= {};
+    roomUsers[roomId][socket.id] = { userId, username, status: "online" };
+    socket.emit("loadMessages", roomMessages[roomId]);
+    io.to(roomId).emit("updateUsers", Object.values(roomUsers[roomId]));
   });
 
-  // Pin message
-  socket.on("pinMessage", async (id) => {
-    const msg = await Chat.findById(id);
-    if (msg && !msg.pinned) {
-      msg.pinned = true;
-      await msg.save();
-      io.emit("pinnedMessage", msg);
-    }
+  // Send message
+  socket.on("sendMessage", ({ roomId, message }) => {
+    const newMessage = {
+      id: `msg-${Date.now()}-${Math.random()}`,
+      content: message.content,
+      user_id: userId,
+      display_name: username,
+      created_at: new Date().toISOString(),
+      type: message.type || "text",
+      is_pinned: false,
+      reactions: [],
+    };
+    roomMessages[roomId].push(newMessage);
+    io.to(roomId).emit("newMessage", newMessage);
   });
 
-  // --- Call signaling ---
-  socket.on("callUser", ({ targetId, type }) => {
-    io.to(targetId).emit("incomingCall", { fromId: socket.id, fromName: username, type });
-  });
-
-  socket.on("answerCall", ({ toId, accepted }) => {
-    io.to(toId).emit("callResponse", { accepted, fromId: socket.id });
-  });
-
-  socket.on("callEnded", ({ toId }) => {
-    io.to(toId).emit("callEnded");
-  });
-
+  // Disconnect
   socket.on("disconnect", () => {
-    delete users[socket.id];
-    io.emit("updateUsers", users);
+    delete userSockets[userId];
+    Object.keys(roomUsers).forEach((roomId) => {
+      if (roomUsers[roomId][socket.id]) {
+        delete roomUsers[roomId][socket.id];
+        io.to(roomId).emit("updateUsers", Object.values(roomUsers[roomId]));
+      }
+    });
   });
 });
 
-// --- Start server & MongoDB ---
-const startServer = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+// Start server
+const PORT = process.env.PORT || 5000;
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
     console.log("✅ MongoDB connected");
-
-    const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
-  } catch (err) {
-    console.error("❌ Failed to connect to MongoDB:", err.message);
-    process.exit(1);
-  }
-};
-
-startServer();
+    server.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+  })
+  .catch((err) => console.error(err));
